@@ -16,6 +16,7 @@
 		1D9E9447212A5C140036B443 /* CoreTextTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 1D9E9446212A5C140036B443 /* CoreTextTests.m */; };
 		1D9E9452212A5C140036B443 /* CoreTextUITests.m in Sources */ = {isa = PBXBuildFile; fileRef = 1D9E9451212A5C140036B443 /* CoreTextUITests.m */; };
 		1D9E9461212A5C380036B443 /* CoreTextView.m in Sources */ = {isa = PBXBuildFile; fileRef = 1D9E9460212A5C380036B443 /* CoreTextView.m */; };
+		1D9E9463212AB1FF0036B443 /* weixiao.gif in Resources */ = {isa = PBXBuildFile; fileRef = 1D9E9462212AB1FF0036B443 /* weixiao.gif */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +55,7 @@
 		1D9E9453212A5C140036B443 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1D9E945F212A5C380036B443 /* CoreTextView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreTextView.h; sourceTree = "<group>"; };
 		1D9E9460212A5C380036B443 /* CoreTextView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CoreTextView.m; sourceTree = "<group>"; };
+		1D9E9462212AB1FF0036B443 /* weixiao.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; path = weixiao.gif; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +112,7 @@
 				1D9E9431212A5C120036B443 /* ViewController.m */,
 				1D9E945F212A5C380036B443 /* CoreTextView.h */,
 				1D9E9460212A5C380036B443 /* CoreTextView.m */,
+				1D9E9462212AB1FF0036B443 /* weixiao.gif */,
 				1D9E9433212A5C120036B443 /* Main.storyboard */,
 				1D9E9436212A5C140036B443 /* Assets.xcassets */,
 				1D9E9438212A5C140036B443 /* LaunchScreen.storyboard */,
@@ -241,6 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1D9E943A212A5C140036B443 /* LaunchScreen.storyboard in Resources */,
+				1D9E9463212AB1FF0036B443 /* weixiao.gif in Resources */,
 				1D9E9437212A5C140036B443 /* Assets.xcassets in Resources */,
 				1D9E9435212A5C120036B443 /* Main.storyboard in Resources */,
 			);

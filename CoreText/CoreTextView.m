@@ -32,6 +32,7 @@
     _text = text;
     NSMutableAttributedString *attributedString = [[NSMutableAttributedString alloc] initWithString:_text];
     _attributedString = attributedString;
+    [self insertImageAttributedString];
     [self refreshAttributedStringStyle];
     [self refreshFramesetter];
     [self setNeedsDisplay];
@@ -94,11 +95,96 @@
         CTFrameRef frameRef = CTFramesetterCreateFrame(_framesetter, CFRangeMake(0, _text.length), path, NULL);
         _frameRef = frameRef;
         [self drawTouchBackground:context];
+        [self drawImage:context];
        
         CTFrameDraw(frameRef, context);
         CGContextRestoreGState(context);
     }
 }
+
+typedef struct CustomGlyphMetrics {
+    CGFloat ascent;
+    CGFloat descent;
+    CGFloat width;
+} CustomGlyphMetrics, *CustomGlyphMetricsRef;
+
+static CGFloat ascentCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->ascent;
+}
+
+static CGFloat descentCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->descent;
+}
+
+static CGFloat widthCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->width;
+}
+
+
+- (void)insertImageAttributedString
+{
+    CTRunDelegateCallbacks callBacks;
+    memset(&callBacks,0,sizeof(CTRunDelegateCallbacks));
+    callBacks.version = kCTRunDelegateVersion1;
+    callBacks.getAscent = ascentCallback;
+    callBacks.getDescent = descentCallback;
+    callBacks.getWidth = widthCallback;
+    
+    CustomGlyphMetricsRef metrics = malloc(sizeof(CustomGlyphMetrics));
+    metrics->width = 20 * 13/14;
+    metrics->ascent = 18;
+    metrics->descent = 2;
+    CTRunDelegateRef delegate = CTRunDelegateCreate(&callBacks, metrics);
+    unichar placeHolder = 0xFFFC;
+    NSString * placeHolderStr = [NSString stringWithCharacters:&placeHolder length:1];
+    [_attributedString insertAttributedString:[[NSAttributedString alloc] initWithString:placeHolderStr] atIndex:0];
+    CFAttributedStringSetAttribute((CFMutableAttributedStringRef)_attributedString, CFRangeMake(0, 1), kCTRunDelegateAttributeName, delegate);
+}
+
+- (void)drawImage:(CGContextRef)context
+{
+    UIImage * image = [UIImage imageNamed:@"weixiao.gif"];
+    CGRect imgFrm = [self calculateImageRectWithFrame:_frameRef];
+    CGContextDrawImage(context,imgFrm, image.CGImage);
+}
+
+- (CGRect)calculateImageRectWithFrame:(CTFrameRef)frame
+{
+    NSArray * arrLines = (NSArray *)CTFrameGetLines(frame);
+    NSInteger count = [arrLines count];
+    CGPoint points[count];
+    CTFrameGetLineOrigins(frame, CFRangeMake(0, 0), points);
+    for (int i = 0; i < count; i ++) {
+        CTLineRef line = (__bridge CTLineRef)arrLines[i];
+        NSArray * arrGlyphRun = (NSArray *)CTLineGetGlyphRuns(line);
+        for (int j = 0; j < arrGlyphRun.count; j ++) {
+            CTRunRef run = (__bridge CTRunRef)arrGlyphRun[j];
+            NSDictionary * attributes = (NSDictionary *)CTRunGetAttributes(run);
+            CTRunDelegateRef delegate = (__bridge CTRunDelegateRef)[attributes valueForKey:(id)kCTRunDelegateAttributeName];
+            if (delegate == nil) {
+                continue;
+            }
+            CGPoint point = points[i];
+            CGFloat ascent;
+            CGFloat descent;
+            CGRect boundsRun;
+            boundsRun.size.width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), &ascent, &descent, NULL);
+            boundsRun.size.height = ascent + descent;
+            CGFloat xOffset = CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, NULL);
+            boundsRun.origin.x = point.x + xOffset;
+            boundsRun.origin.y = point.y - descent;
+            CGPathRef path = CTFrameGetPath(frame);
+            CGRect colRect = CGPathGetBoundingBox(path);
+            CGRect imageBounds = CGRectOffset(boundsRun, colRect.origin.x, colRect.origin.y);
+            return imageBounds;
+        }
+    }
+    return CGRectZero;
+}
+
 
 - (void)drawTouchBackground:(CGContextRef)context
 {
