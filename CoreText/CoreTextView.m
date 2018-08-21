@@ -9,12 +9,16 @@
 #import "CoreTextView.h"
 #import <CoreText/CoreText.h>
 
+NSString *const kCustomGlyphAttributeImageName = @"CustomGlyphAttributeImageName";
+
 @interface CoreTextView()
 {
     CTFramesetterRef _framesetter;
     CTFrameRef _frameRef;
 }
 @property (nonatomic, strong) NSMutableArray *touchBackgroundRangeArray;
+@property (nonatomic, strong) NSDictionary *imageDictionary;
+@property (nonatomic, strong) NSString *imagePatternString;
 @end
 
 @implementation CoreTextView
@@ -34,7 +38,6 @@
     _attributedString = attributedString;
     [self insertImageAttributedString];
     [self refreshAttributedStringStyle];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
@@ -42,7 +45,6 @@
 {
     _font = font;
     [self refreshFont];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
@@ -50,7 +52,6 @@
 {
     _alignment = alignment;
     [self refreshParagraphStyle];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
@@ -58,7 +59,6 @@
 {
     _lineBreakMode = lineBreakMode;
     [self refreshParagraphStyle];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
@@ -66,7 +66,6 @@
 {
     _lineSpace = lineSpace;
     [self refreshParagraphStyle];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
@@ -74,158 +73,10 @@
 {
     _colorRangeArray = colorRangeArray;
     [self refreshColorRange];
-    [self refreshFramesetter];
     [self setNeedsDisplay];
 }
 
-#pragma mark - draw
-
-- (void)drawRect:(CGRect)rect
-{
-    if (_text.length) {
-        CGContextRef context = UIGraphicsGetCurrentContext();
-        CGContextSaveGState(context);
-        /*翻转坐标*/
-        CGContextSetTextMatrix(context, CGAffineTransformIdentity);
-        CGContextTranslateCTM(context, 0, rect.size.height);
-        CGContextScaleCTM(context, 1.0, -1.0);
-        
-        CGMutablePathRef path = CGPathCreateMutable();
-        CGPathAddRect(path, NULL, rect);
-        CTFrameRef frameRef = CTFramesetterCreateFrame(_framesetter, CFRangeMake(0, _text.length), path, NULL);
-        _frameRef = frameRef;
-        [self drawTouchBackground:context];
-        [self drawImage:context];
-       
-        CTFrameDraw(frameRef, context);
-        CGContextRestoreGState(context);
-    }
-}
-
-typedef struct CustomGlyphMetrics {
-    CGFloat ascent;
-    CGFloat descent;
-    CGFloat width;
-} CustomGlyphMetrics, *CustomGlyphMetricsRef;
-
-static CGFloat ascentCallback(void *refCon) {
-    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
-    return metrics->ascent;
-}
-
-static CGFloat descentCallback(void *refCon) {
-    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
-    return metrics->descent;
-}
-
-static CGFloat widthCallback(void *refCon) {
-    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
-    return metrics->width;
-}
-
-
-- (void)insertImageAttributedString
-{
-    CTRunDelegateCallbacks callBacks;
-    memset(&callBacks,0,sizeof(CTRunDelegateCallbacks));
-    callBacks.version = kCTRunDelegateVersion1;
-    callBacks.getAscent = ascentCallback;
-    callBacks.getDescent = descentCallback;
-    callBacks.getWidth = widthCallback;
-    
-    CustomGlyphMetricsRef metrics = malloc(sizeof(CustomGlyphMetrics));
-    metrics->width = 20 * 13/14;
-    metrics->ascent = 18;
-    metrics->descent = 2;
-    CTRunDelegateRef delegate = CTRunDelegateCreate(&callBacks, metrics);
-    unichar placeHolder = 0xFFFC;
-    NSString * placeHolderStr = [NSString stringWithCharacters:&placeHolder length:1];
-    [_attributedString insertAttributedString:[[NSAttributedString alloc] initWithString:placeHolderStr] atIndex:0];
-    CFAttributedStringSetAttribute((CFMutableAttributedStringRef)_attributedString, CFRangeMake(0, 1), kCTRunDelegateAttributeName, delegate);
-}
-
-- (void)drawImage:(CGContextRef)context
-{
-    UIImage * image = [UIImage imageNamed:@"weixiao.gif"];
-    CGRect imgFrm = [self calculateImageRectWithFrame:_frameRef];
-    CGContextDrawImage(context,imgFrm, image.CGImage);
-}
-
-- (CGRect)calculateImageRectWithFrame:(CTFrameRef)frame
-{
-    NSArray * arrLines = (NSArray *)CTFrameGetLines(frame);
-    NSInteger count = [arrLines count];
-    CGPoint points[count];
-    CTFrameGetLineOrigins(frame, CFRangeMake(0, 0), points);
-    for (int i = 0; i < count; i ++) {
-        CTLineRef line = (__bridge CTLineRef)arrLines[i];
-        NSArray * arrGlyphRun = (NSArray *)CTLineGetGlyphRuns(line);
-        for (int j = 0; j < arrGlyphRun.count; j ++) {
-            CTRunRef run = (__bridge CTRunRef)arrGlyphRun[j];
-            NSDictionary * attributes = (NSDictionary *)CTRunGetAttributes(run);
-            CTRunDelegateRef delegate = (__bridge CTRunDelegateRef)[attributes valueForKey:(id)kCTRunDelegateAttributeName];
-            if (delegate == nil) {
-                continue;
-            }
-            CGPoint point = points[i];
-            CGFloat ascent;
-            CGFloat descent;
-            CGRect boundsRun;
-            boundsRun.size.width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), &ascent, &descent, NULL);
-            boundsRun.size.height = ascent + descent;
-            CGFloat xOffset = CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, NULL);
-            boundsRun.origin.x = point.x + xOffset;
-            boundsRun.origin.y = point.y - descent;
-            CGPathRef path = CTFrameGetPath(frame);
-            CGRect colRect = CGPathGetBoundingBox(path);
-            CGRect imageBounds = CGRectOffset(boundsRun, colRect.origin.x, colRect.origin.y);
-            return imageBounds;
-        }
-    }
-    return CGRectZero;
-}
-
-
-- (void)drawTouchBackground:(CGContextRef)context
-{
-    if (!_touchBackgroundRangeArray.count) {
-        return;
-    }
-
-    CFArrayRef lines = CTFrameGetLines(_frameRef);
-    CGPoint lineOrigins[CFArrayGetCount(lines)];
-    CTFrameGetLineOrigins(_frameRef, CFRangeMake(0, 0), lineOrigins);
-
-    for (NSString *rangeStr in self.touchBackgroundRangeArray) {
-        NSRange range = NSRangeFromString(rangeStr);
-        for (int i = 0; i < CFArrayGetCount(lines); i++) {
-            CTLineRef line = CFArrayGetValueAtIndex(lines, i);
-             CGPoint lineOrigin = lineOrigins[i];
-            for (id glyphRun in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
-                CGFloat runAscent;
-                CGFloat runDescent;
-                CGFloat runLeading;
-               
-                CTRunRef run = (__bridge CTRunRef)(glyphRun);
-                CFRange glyphRange = CTRunGetStringRange(run);
-                CGRect runRect;
-                runRect.size.width = CTRunGetTypographicBounds(run, CFRangeMake(0,0), &runAscent, &runDescent, &runLeading);
-                runRect = CGRectMake(lineOrigin.x + CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, NULL), lineOrigin.y, runRect.size.width, runAscent + runDescent + runLeading);
-                if (glyphRange.location >= range.location && glyphRange.location + glyphRange.length <= range.location + range.length) {
-                    /*
-                    CGContextSetLineJoin(context, kCGLineJoinRound);
-                    CGContextSetFillColorWithColor(context,[UIColor yellowColor].CGColor);
-                    CGContextFillRect(context , runRect);
-                     */
-                    CGPathRef path = [[UIBezierPath bezierPathWithRoundedRect:runRect cornerRadius:3] CGPath];
-                    CGContextSetFillColorWithColor(context, [UIColor yellowColor].CGColor);
-                    CGContextAddPath(context, path);
-                    CGContextFillPath(context);
-                }
-            }
-        }
-    }
-}
+#pragma mark - attribute
 
 - (void)refreshAttributedStringStyle
 {
@@ -261,11 +112,170 @@ static CGFloat widthCallback(void *refCon) {
                               range:NSMakeRange(0, _attributedString.string.length)];
 }
 
-- (void)refreshFramesetter
-{
-    CTFramesetterRef framesetter =  CTFramesetterCreateWithAttributedString((CFAttributedStringRef)_attributedString);
-    _framesetter = framesetter;
+typedef struct CustomGlyphMetrics {
+    CGFloat ascent;
+    CGFloat descent;
+    CGFloat width;
+} CustomGlyphMetrics, *CustomGlyphMetricsRef;
+
+static CGFloat ascentCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->ascent;
 }
+
+static CGFloat descentCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->descent;
+}
+
+static CGFloat widthCallback(void *refCon) {
+    CustomGlyphMetricsRef metrics = (CustomGlyphMetricsRef)refCon;
+    return metrics->width;
+}
+
+
+- (void)insertImageAttributedString
+{
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:self.imagePatternString options:kNilOptions error:NULL];
+    NSArray<NSTextCheckingResult *> *emoticonResults = [regex matchesInString:_text options:kNilOptions range:NSMakeRange(0, _text.length)];
+    
+    NSUInteger emoClipLength = 0;
+    for (NSTextCheckingResult *emo in emoticonResults) {
+        CTRunDelegateCallbacks callBacks;
+        memset(&callBacks,0,sizeof(CTRunDelegateCallbacks));
+        callBacks.version = kCTRunDelegateVersion1;
+        callBacks.getAscent = ascentCallback;
+        callBacks.getDescent = descentCallback;
+        callBacks.getWidth = widthCallback;
+        
+        CustomGlyphMetricsRef metrics = malloc(sizeof(CustomGlyphMetrics));
+        metrics->width = 20 * 13/14;
+        metrics->ascent = 18;
+        metrics->descent = 2;
+        CTRunDelegateRef delegate = CTRunDelegateCreate(&callBacks, metrics);
+        unichar placeHolder = 0xFFFC;
+        NSString * placeHolderStr = [NSString stringWithCharacters:&placeHolder length:1];
+        
+        NSRange replaceRange = NSMakeRange(emo.range.location + emoClipLength, emo.range.length);
+        [_attributedString replaceCharactersInRange:replaceRange withAttributedString:[[NSAttributedString alloc] initWithString:placeHolderStr]];
+        CFAttributedStringSetAttribute((CFMutableAttributedStringRef)_attributedString, CFRangeMake(replaceRange.location, 1), kCTRunDelegateAttributeName, delegate);
+        
+        NSString *value = self.imageDictionary[[_text substringWithRange:emo.range]];
+        if (value) {
+            [_attributedString addAttribute:kCustomGlyphAttributeImageName
+                                      value:value
+                                      range:NSMakeRange(replaceRange.location, 1)];
+        }
+        emoClipLength += emo.range.length;
+    }
+}
+
+
+#pragma mark - draw
+
+- (void)drawRect:(CGRect)rect
+{
+    if (_attributedString) {
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        CGContextSaveGState(context);
+        /*翻转坐标*/
+        CGContextSetTextMatrix(context, CGAffineTransformIdentity);
+        CGContextTranslateCTM(context, 0, rect.size.height);
+        CGContextScaleCTM(context, 1.0, -1.0);
+        
+        CGMutablePathRef path = CGPathCreateMutable();
+        CGPathAddRect(path, NULL, rect);
+        
+        CTFramesetterRef framesetter =  CTFramesetterCreateWithAttributedString((CFAttributedStringRef)_attributedString);
+        _framesetter = framesetter;
+        CTFrameRef frameRef = CTFramesetterCreateFrame(_framesetter, CFRangeMake(0, _attributedString.string.length), path, NULL);
+        _frameRef = frameRef;
+        [self drawTouchBackground:context];
+        [self drawImage:context];
+       
+        CTFrameDraw(frameRef, context);
+        CGContextRestoreGState(context);
+    }
+}
+
+- (void)drawImage:(CGContextRef)context
+{
+    NSArray * arrLines = (NSArray *)CTFrameGetLines(_frameRef);
+    NSInteger count = [arrLines count];
+    CGPoint points[count];
+    CTFrameGetLineOrigins(_frameRef, CFRangeMake(0, 0), points);
+    for (int i = 0; i < count; i ++) {
+        CTLineRef line = (__bridge CTLineRef)arrLines[i];
+        NSArray * arrGlyphRun = (NSArray *)CTLineGetGlyphRuns(line);
+        for (int j = 0; j < arrGlyphRun.count; j ++) {
+            CTRunRef run = (__bridge CTRunRef)arrGlyphRun[j];
+            NSDictionary * attributes = (NSDictionary *)CTRunGetAttributes(run);
+            CTRunDelegateRef delegate = (__bridge CTRunDelegateRef)[attributes valueForKey:(id)kCTRunDelegateAttributeName];
+            if (delegate == nil) {
+                continue;
+            }
+            NSString *imageName = [attributes valueForKey:kCustomGlyphAttributeImageName];
+            CGPoint point = points[i];
+            CGFloat ascent;
+            CGFloat descent;
+            CGRect boundsRun;
+            boundsRun.size.width = CTRunGetTypographicBounds(run, CFRangeMake(0, 0), &ascent, &descent, NULL);
+            boundsRun.size.height = ascent + descent;
+            CGFloat xOffset = CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, NULL);
+            boundsRun.origin.x = point.x + xOffset;
+            boundsRun.origin.y = point.y - descent;
+            CGPathRef path = CTFrameGetPath(_frameRef);
+            CGRect colRect = CGPathGetBoundingBox(path);
+            CGRect imageBounds = CGRectOffset(boundsRun, colRect.origin.x, colRect.origin.y);
+            UIImage * image = [UIImage imageNamed:imageName];
+            CGContextDrawImage(context,imageBounds, image.CGImage);
+        }
+    }
+}
+
+
+- (void)drawTouchBackground:(CGContextRef)context
+{
+    if (!_touchBackgroundRangeArray.count) {
+        return;
+    }
+
+    CFArrayRef lines = CTFrameGetLines(_frameRef);
+    CGPoint lineOrigins[CFArrayGetCount(lines)];
+    CTFrameGetLineOrigins(_frameRef, CFRangeMake(0, 0), lineOrigins);
+
+    for (NSString *rangeStr in self.touchBackgroundRangeArray) {
+        NSRange range = NSRangeFromString(rangeStr);
+        for (int i = 0; i < CFArrayGetCount(lines); i++) {
+            CTLineRef line = CFArrayGetValueAtIndex(lines, i);
+             CGPoint lineOrigin = lineOrigins[i];
+            for (id glyphRun in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
+                CGFloat runAscent;
+                CGFloat runDescent;
+                CGFloat runLeading;
+               
+                CTRunRef run = (__bridge CTRunRef)(glyphRun);
+                CFRange glyphRange = CTRunGetStringRange(run);
+                
+                CGRect runRect;
+                runRect.size.width = CTRunGetTypographicBounds(run, CFRangeMake(0,0), &runAscent, &runDescent, &runLeading);
+                runRect = CGRectMake(lineOrigin.x + CTLineGetOffsetForStringIndex(line, CTRunGetStringRange(run).location, NULL), lineOrigin.y, runRect.size.width, runAscent + runDescent + runLeading);
+                if (glyphRange.location >= range.location && glyphRange.location + glyphRange.length <= range.location + range.length) {
+                    /*
+                    CGContextSetLineJoin(context, kCGLineJoinRound);
+                    CGContextSetFillColorWithColor(context,[UIColor yellowColor].CGColor);
+                    CGContextFillRect(context , runRect);
+                     */
+                    CGPathRef path = [[UIBezierPath bezierPathWithRoundedRect:runRect cornerRadius:3] CGPath];
+                    CGContextSetFillColorWithColor(context, [UIColor yellowColor].CGColor);
+                    CGContextAddPath(context, path);
+                    CGContextFillPath(context);
+                }
+            }
+        }
+    }
+}
+
 
 #pragma mark - touch
 
@@ -328,7 +338,7 @@ static CGFloat widthCallback(void *refCon) {
 - (CGSize)suggestSize
 {
     CGSize targetSize = CGSizeMake(self.frame.size.width, CGFLOAT_MAX);
-    CGSize suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(_framesetter, CFRangeMake(0, (CFIndex)(_text.length)), NULL, targetSize, NULL);
+    CGSize suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(_framesetter, CFRangeMake(0, (CFIndex)(_attributedString.string.length)), NULL, targetSize, NULL);
     return suggestedSize;
 }
 
@@ -341,4 +351,25 @@ static CGFloat widthCallback(void *refCon) {
     return _touchBackgroundRangeArray;
 }
 
+- (NSDictionary *)imageDictionary
+{
+    if (!_imageDictionary) {
+        _imageDictionary = @{@"[微笑]":@"weixiao.gif",@"[白眼]":@"baiyan.gif"};
+    }
+    return _imageDictionary;
+}
+
+- (NSString *)imagePatternString
+{
+    if (!_imagePatternString) {
+        NSMutableArray *arr = [[NSMutableArray alloc] init];
+        [self.imageDictionary.allKeys enumerateObjectsUsingBlock:^(NSString *str, NSUInteger idx, BOOL *stop) {
+            NSString *temp = [str stringByReplacingOccurrencesOfString:@"]" withString:@""];
+            temp = [NSString stringWithFormat:@"\\%@\\]",temp];
+            [arr addObject:temp];
+        }];
+        _imagePatternString = [arr componentsJoinedByString:@"|"];
+    }
+    return _imagePatternString;
+}
 @end

@@ -32,8 +32,8 @@
     coreView.font = [UIFont systemFontOfSize:20];
     coreView.lineSpace = 10;
     coreView.alignment = NSTextAlignmentCenter;
-    coreView.colorRangeArray = @[NSStringFromRange(NSMakeRange(1, 5)),NSStringFromRange(NSMakeRange(7, 3)),NSStringFromRange(NSMakeRange(15, 2))];
-    coreView.text = @"测试是爱上你的罚款放到那房间看电视烦恼四大皆空发那束带结发十多年福建省对方能接受的看法对方迪士尼开发商的耐腐蚀大嫁风尚带你飞九点十分年历史的烦恼";
+    coreView.colorRangeArray = @[NSStringFromRange(NSMakeRange(4, 5)),NSStringFromRange(NSMakeRange(10, 3)),NSStringFromRange(NSMakeRange(19, 2))];
+    coreView.text = @"1[微笑]测试是爱上你的罚款放到那房间看电视烦恼四大皆空发那束带结发十多年福建省对方能接受的[白眼]看法对方迪士尼开发商的耐腐蚀大嫁风尚带你飞九点十分年历史的烦恼";
 //    CGSize size = [coreView suggestSize];
 //    coreView.frame = CGRectMake(0, 84, size.width, size.height);
 }
