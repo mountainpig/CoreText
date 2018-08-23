@@ -55,13 +55,6 @@ NSString *const kCustomGlyphAttributeImageName = @"CustomGlyphAttributeImageName
     [self setNeedsDisplay];
 }
 
-- (void)setLineBreakMode:(NSLineBreakMode)lineBreakMode
-{
-    _lineBreakMode = lineBreakMode;
-    [self refreshParagraphStyle];
-    [self setNeedsDisplay];
-}
-
 - (void)setLineSpace:(CGFloat)lineSpace
 {
     _lineSpace = lineSpace;
@@ -73,6 +66,18 @@ NSString *const kCustomGlyphAttributeImageName = @"CustomGlyphAttributeImageName
 {
     _colorRangeArray = colorRangeArray;
     [self refreshColorRange];
+    [self setNeedsDisplay];
+}
+
+- (void)setLineBreakMode:(NSLineBreakMode)lineBreakMode
+{
+    _lineBreakMode = lineBreakMode;
+    [self setNeedsDisplay];
+}
+
+- (void)setNumberOfLines:(NSInteger)numberOfLines
+{
+    _numberOfLines = numberOfLines;
     [self setNeedsDisplay];
 }
 
@@ -106,7 +111,6 @@ NSString *const kCustomGlyphAttributeImageName = @"CustomGlyphAttributeImageName
     NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
     paragraphStyle.alignment = _alignment;
     paragraphStyle.lineSpacing = _lineSpace;
-    paragraphStyle.lineBreakMode = _lineBreakMode;
     [_attributedString addAttribute:NSParagraphStyleAttributeName
                               value:paragraphStyle
                               range:NSMakeRange(0, _attributedString.string.length)];
@@ -179,10 +183,11 @@ static CGFloat widthCallback(void *refCon) {
         CGContextRef context = UIGraphicsGetCurrentContext();
         CGContextSaveGState(context);
         /*翻转坐标*/
+ 
         CGContextSetTextMatrix(context, CGAffineTransformIdentity);
         CGContextTranslateCTM(context, 0, rect.size.height);
         CGContextScaleCTM(context, 1.0, -1.0);
-        
+
         CGMutablePathRef path = CGPathCreateMutable();
         CGPathAddRect(path, NULL, rect);
         
@@ -192,8 +197,7 @@ static CGFloat widthCallback(void *refCon) {
         _frameRef = frameRef;
         [self drawTouchBackground:context];
         [self drawImage:context];
-       
-        CTFrameDraw(frameRef, context);
+        [self drawText:context];
         CGContextRestoreGState(context);
     }
 }
@@ -204,7 +208,12 @@ static CGFloat widthCallback(void *refCon) {
     NSInteger count = [arrLines count];
     CGPoint points[count];
     CTFrameGetLineOrigins(_frameRef, CFRangeMake(0, 0), points);
-    for (int i = 0; i < count; i ++) {
+
+    NSInteger lineCount = count;
+    if (_numberOfLines > 0) {
+        lineCount = MIN(_numberOfLines, lineCount);
+    }
+    for (int i = 0; i < lineCount; i ++) {
         CTLineRef line = (__bridge CTLineRef)arrLines[i];
         NSArray * arrGlyphRun = (NSArray *)CTLineGetGlyphRuns(line);
         for (int j = 0; j < arrGlyphRun.count; j ++) {
@@ -246,7 +255,11 @@ static CGFloat widthCallback(void *refCon) {
 
     for (NSString *rangeStr in self.touchBackgroundRangeArray) {
         NSRange range = NSRangeFromString(rangeStr);
-        for (int i = 0; i < CFArrayGetCount(lines); i++) {
+        NSInteger lineCount = CFArrayGetCount(lines);
+        if (_numberOfLines > 0) {
+            lineCount = MIN(_numberOfLines, lineCount);
+        }
+        for (int i = 0; i < lineCount; i++) {
             CTLineRef line = CFArrayGetValueAtIndex(lines, i);
              CGPoint lineOrigin = lineOrigins[i];
             for (id glyphRun in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
@@ -276,6 +289,48 @@ static CGFloat widthCallback(void *refCon) {
     }
 }
 
+- (void)drawText:(CGContextRef)context
+{
+    CFArrayRef lines = CTFrameGetLines(_frameRef);
+    CGPoint lineOrigins[CFArrayGetCount(lines)];
+    CTFrameGetLineOrigins(_frameRef, CFRangeMake(0, 0), lineOrigins);
+    NSInteger drawCount = (NSInteger)CFArrayGetCount(lines);
+    if (_numberOfLines > 0 && _numberOfLines < drawCount) {
+        drawCount = _numberOfLines;
+        for (int i = 0; i < drawCount; i++) {
+            CTLineRef line = CFArrayGetValueAtIndex(lines, i);
+            CGPoint lineOrigin = lineOrigins[i];
+            //                CGRect bounds = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
+            CGContextSetTextPosition(context, lineOrigin.x, lineOrigin.y);
+            if (i == drawCount - 1 && _lineBreakMode == NSLineBreakByTruncatingTail) {
+                NSAttributedString *truncatedString = [[NSAttributedString alloc] initWithString:@"\u2026"];
+                CTLineRef token = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)truncatedString);
+                CFRange lastLineRange = CTLineGetStringRange(line);
+                NSMutableAttributedString *subAttributedString = [[_attributedString attributedSubstringFromRange:NSMakeRange((NSUInteger)lastLineRange.location, (NSUInteger)lastLineRange.length)] mutableCopy];
+                [subAttributedString appendAttributedString:truncatedString];
+                line = CTLineCreateTruncatedLine(CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)subAttributedString), self.frame.size.width, kCTLineTruncationEnd, token);
+            }
+            CTLineDraw(line, context);
+        }
+    } else {
+        if (_lineBreakMode == NSLineBreakByTruncatingTail) {
+            CTLineRef line = CFArrayGetValueAtIndex(lines, drawCount - 1);
+            CFRange lastLineRange = CTLineGetStringRange(line);
+            NSMutableAttributedString *tempAttributedString = [[NSMutableAttributedString alloc] initWithAttributedString:_attributedString];
+            
+            NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+            paragraphStyle.lineBreakMode = _lineBreakMode;
+            [tempAttributedString addAttribute:NSParagraphStyleAttributeName
+                                         value:paragraphStyle
+                                         range:NSMakeRange(lastLineRange.location, lastLineRange.length)];
+            CTFramesetterRef framesetter =  CTFramesetterCreateWithAttributedString((CFAttributedStringRef)tempAttributedString);
+            CTFrameRef frameRef = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, tempAttributedString.string.length), CTFrameGetPath(_frameRef), NULL);
+            CTFrameDraw(frameRef, context);
+        } else {
+            CTFrameDraw(_frameRef, context);
+        }
+    }
+}
 
 #pragma mark - touch
 

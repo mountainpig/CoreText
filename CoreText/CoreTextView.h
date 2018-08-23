@@ -16,13 +16,15 @@
 
 @property (nonatomic, strong) UIFont *font;
 
-@property (nonatomic, assign) NSTextAlignment alignment;
+@property (nonatomic) NSTextAlignment alignment;
 
-@property (nonatomic, assign) NSLineBreakMode lineBreakMode;
-
-@property (nonatomic, assign) CGFloat lineSpace;
+@property (nonatomic) CGFloat lineSpace;
 
 @property (nonatomic, strong) NSArray <NSString *>*colorRangeArray;
+
+@property (nonatomic) NSLineBreakMode lineBreakMode;
+
+@property (nonatomic) NSInteger numberOfLines;
 
 - (CGSize)suggestSize;
 @end
